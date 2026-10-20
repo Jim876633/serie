@@ -80,6 +80,10 @@ impl<'a> GitRepository<'a> {
         String::from_utf8(output.stdout).unwrap().trim().to_string()
     }
 
+    pub fn update_ref(&self, ref_name: &str, target: &str) {
+        self.run(&["update-ref", ref_name, target], "");
+    }
+
     pub fn log(&self) {
         let output = self.run(&["log", "--pretty=format:%h %s", "--graph", "--all"], "");
         println!("{}", String::from_utf8(output.stdout).unwrap())

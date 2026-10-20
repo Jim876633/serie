@@ -87,7 +87,25 @@ impl<'a> GraphImageManager<'a> {
     }
 
     pub fn graph_cell_width(&self) -> u16 {
-        let cell_count = (self.graph.max_pos_x + 1) as u16;
+        self.cells_for(self.graph.max_pos_x)
+    }
+
+    pub fn visible_graph_cell_width<'h>(
+        &self,
+        visible_commit_hashes: impl Iterator<Item = &'h CommitHash>,
+    ) -> u16 {
+        if self.image_width_mode == GraphImageWidthMode::Fixed {
+            return self.graph_cell_width();
+        }
+        let max_pos_x = visible_commit_hashes
+            .map(|hash| row_max_pos_x(self.graph, hash))
+            .max()
+            .unwrap_or(0);
+        self.cells_for(max_pos_x)
+    }
+
+    fn cells_for(&self, max_pos_x: usize) -> u16 {
+        let cell_count = (max_pos_x + 1) as u16;
         match self.cell_width_type {
             CellWidthType::Double => cell_count * 2,
             CellWidthType::Single => cell_count,
@@ -249,7 +267,7 @@ pub fn build_single_graph_row_image(
     let edges = &graph.edges[pos_y];
 
     let max_pos_x = match image_width_mode {
-        GraphImageWidthMode::Compact => edges.iter().map(|e| e.pos_x).fold(pos_x, usize::max),
+        GraphImageWidthMode::Compact => row_max_pos_x(graph, commit_hash),
         GraphImageWidthMode::Fixed => graph.max_pos_x,
     };
 
@@ -263,6 +281,14 @@ pub fn build_single_graph_row_image(
         drawing_pixels,
         graph_style,
     )
+}
+
+fn row_max_pos_x(graph: &Graph<'_>, commit_hash: &CommitHash) -> usize {
+    let (pos_x, pos_y) = graph.commit_pos_map[commit_hash];
+    graph.edges[pos_y]
+        .iter()
+        .map(|e| e.pos_x)
+        .fold(pos_x, usize::max)
 }
 
 type Pixels = FxHashSet<(i32, i32)>;

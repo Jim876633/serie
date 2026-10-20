@@ -203,6 +203,7 @@ The width mode for each graph row image.
 - default: `compact`
 - possible values:
   - `compact`: trim each row image to the minimum required graph width
+    - The graph column is as wide as the rows currently in view need, so a wide part of the history elsewhere leaves no blank space.
     - Reduces the file size for more lightweight operation. If you are using `kitty-unicode` protocol, it helps you avoid hitting [the image transfer size limit](https://sw.kovidgoyal.net/kitty/graphics-protocol/#image-persistence-and-storage-quotas).
   - `fixed`: use the same full graph width for every row image
     - This can be used when you want to set a background color for graphs in environments that cannot correctly handle transparent images, or in environments where rendering does not work well when there are images of various widths.

@@ -51,7 +51,6 @@ pub enum AppEvent {
     #[expect(dead_code)]
     NotifyInfo(String),
     NotifySuccess(String),
-    #[expect(dead_code)]
     NotifyWarn(String),
     NotifyError(String),
 }
@@ -236,6 +235,7 @@ pub enum UserEvent {
     Refresh,
     ShortCopy,
     FullCopy,
+    BranchCopy,
     Unknown,
 }
 
@@ -301,6 +301,7 @@ impl<'de> Deserialize<'de> for UserEvent {
                         "refresh" => Ok(UserEvent::Refresh),
                         "short_copy" => Ok(UserEvent::ShortCopy),
                         "full_copy" => Ok(UserEvent::FullCopy),
+                        "branch_copy" => Ok(UserEvent::BranchCopy),
                         _ => {
                             let msg = format!("Unknown user event: {value}");
                             Err(de::Error::custom(msg))

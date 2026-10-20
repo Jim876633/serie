@@ -133,6 +133,9 @@ impl<'a> ListView<'a> {
                 UserEvent::FullCopy => {
                     self.copy_commit_hash();
                 }
+                UserEvent::BranchCopy => {
+                    self.copy_branch_name();
+                }
                 UserEvent::Search => {
                     self.as_mut_list_state().start_search();
                     self.update_search_status();
@@ -277,6 +280,15 @@ impl<'a> ListView<'a> {
     fn copy_commit_hash(&self) {
         let selected = self.as_list_state().selected_commit_hash();
         self.copy_to_clipboard("Commit SHA".into(), selected.as_str().into());
+    }
+
+    fn copy_branch_name(&self) {
+        match self.as_list_state().selected_commit_branch_name() {
+            Some(name) => self.copy_to_clipboard("Branch Name".into(), name.into()),
+            None => self
+                .tx
+                .send(AppEvent::NotifyWarn("No branch on this commit".into())),
+        }
     }
 
     fn copy_to_clipboard(&self, name: String, value: String) {

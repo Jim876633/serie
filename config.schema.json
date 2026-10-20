@@ -728,6 +728,9 @@
         },
         "full_copy": {
           "$ref": "#/definitions/keybindArray"
+        },
+        "branch_copy": {
+          "$ref": "#/definitions/keybindArray"
         }
       },
       "patternProperties": {

@@ -36,6 +36,7 @@ The default key bindings can be overridden.
 | <kbd>m</kbd>                         | Toggle commit mark                                 | `mark_toggle`                                |
 | <kbd>R</kbd>                         | Refresh                                            | `refresh`                                    |
 | <kbd>c/C</kbd>                       | Copy commit short/full hash                        | `short_copy` `full_copy`                     |
+| <kbd>b</kbd>                         | Copy branch name                                   | `branch_copy`                                |
 | <kbd>d</kbd>                         | Toggle custom user command view                    | `user_command_1`                             |
 
 #### Commit Detail

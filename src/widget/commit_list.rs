@@ -242,6 +242,18 @@ impl<'a> CommitListState<'a> {
         self.graph_cell_width + 1 // right pad
     }
 
+    pub fn visible_graph_area_cell_width(&self) -> u16 {
+        let visible_commit_hashes = self
+            .commits
+            .iter()
+            .skip(self.offset)
+            .take(self.height)
+            .map(|commit_info| &commit_info.commit.commit_hash);
+        self.graph_image_manager
+            .visible_graph_cell_width(visible_commit_hashes)
+            + 1 // right pad
+    }
+
     pub fn marked_commit_hash(&self) -> Option<&CommitHash> {
         self.marked_commit_hash.as_ref()
     }
@@ -479,6 +491,30 @@ impl<'a> CommitListState<'a> {
         &self.commits[self.current_selected_index()]
             .commit
             .commit_hash
+    }
+
+    // Prefers the checked-out branch, then a local one, then a remote one without its remote
+    // prefix, which is the name `git switch` takes.
+    pub fn selected_commit_branch_name(&self) -> Option<&str> {
+        let refs = &self.commits[self.current_selected_index()].refs;
+        let head_branch = match self.head {
+            Head::Branch { name } => Some(name.as_str()),
+            _ => None,
+        };
+        let local = refs.iter().filter_map(|r| match r {
+            Ref::Branch { name, .. } => Some(name.as_str()),
+            _ => None,
+        });
+        let remote = refs.iter().filter_map(|r| match r {
+            Ref::RemoteBranch { name, .. } if !name.ends_with("/HEAD") => {
+                Some(name.split_once('/').map_or(name.as_str(), |(_, n)| n))
+            }
+            _ => None,
+        });
+        let mut candidates = local.clone().chain(remote);
+        head_branch
+            .filter(|head| local.clone().any(|name| name == *head))
+            .or_else(|| candidates.next())
     }
 
     fn current_selected_index(&self) -> usize {
@@ -785,7 +821,7 @@ impl<'a> StatefulWidget for CommitList<'a> {
         let constraints = calc_cell_widths(
             area.width,
             self.ctx.ui_config.list.subject_min_width,
-            state.graph_area_cell_width(),
+            state.visible_graph_area_cell_width(),
             self.ctx.ui_config.list.name_width,
             self.ctx.ui_config.list.date_width,
             &self.ctx.ui_config.list.columns,
@@ -1241,6 +1277,7 @@ mod tests {
         graph::{calc_graph, CellWidthType, GraphImageWidthMode, GraphStyle},
         keybind::KeyBind,
         protocol::ImageProtocol,
+        test_support::git::GitRepository,
         view::ListRefreshViewContext,
     };
 
@@ -2235,5 +2272,107 @@ mod tests {
             Constraint::Length(6),  // Graph
         ];
         assert_eq!(actual, expected);
+    }
+
+    fn with_repository_state<R>(
+        repo_path: &std::path::Path,
+        f: impl FnOnce(&mut CommitListState<'_>) -> R,
+    ) -> R {
+        let repository = Repository::load(
+            repo_path,
+            crate::git::SortCommit::Chronological,
+            None,
+            false,
+        )
+        .unwrap();
+        let graph = calc_graph(&repository, None);
+        let graph_color_set = GraphColorSet::new(&GraphColorConfig::default());
+        let graph_image_manager = GraphImageManager::new(
+            &graph,
+            &graph_color_set,
+            CellWidthType::Double,
+            GraphStyle::Rounded,
+            false,
+            GraphImageWidthMode::Compact,
+            ImageProtocol::Iterm2,
+        );
+        let graph_cell_width = graph_image_manager.graph_cell_width();
+        let commit_infos = graph
+            .commits
+            .iter()
+            .map(|commit| {
+                CommitInfo::new(commit, repository.refs(&commit.commit_hash), Color::Reset)
+            })
+            .collect();
+        let mut state = CommitListState::new(
+            commit_infos,
+            graph_image_manager,
+            graph_cell_width,
+            repository.head(),
+            FxHashMap::default(),
+            SearchOptions::default(),
+            0,
+        );
+        f(&mut state)
+    }
+
+    #[test]
+    fn test_graph_width_follows_visible_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = GitRepository::new(dir.path());
+        git.init();
+        git.commit("base", "2024-01-01");
+        git.checkout_b("feat");
+        git.commit("feat", "2024-01-02");
+        git.checkout("master");
+        git.commit("master", "2024-01-03");
+        git.merge(&["feat"], "2024-01-04");
+        for (i, date) in ["2024-01-05", "2024-01-06", "2024-01-07"]
+            .iter()
+            .enumerate()
+        {
+            git.commit(&format!("after merge {i}"), date);
+        }
+
+        with_repository_state(dir.path(), |state| {
+            // Two lanes, two cells each, plus the right pad.
+            assert_eq!(state.graph_area_cell_width(), 5);
+
+            state.reset_height(3);
+            assert_eq!(state.visible_graph_area_cell_width(), 3);
+
+            state.reset_height(7);
+            assert_eq!(state.visible_graph_area_cell_width(), 5);
+        });
+    }
+
+    #[test]
+    fn test_selected_commit_branch_name_prefers_head_then_local_then_remote() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = GitRepository::new(dir.path());
+        git.init();
+        git.commit("first", "2024-01-01");
+        let first = git.rev_parse_head();
+        git.update_ref("refs/remotes/origin/feat/remote-only", &first);
+        git.update_ref("refs/remotes/origin/HEAD", &first);
+        git.commit("second", "2024-01-02");
+        git.checkout_b("feat/a");
+        git.checkout("master");
+
+        with_repository_state(dir.path(), |state| {
+            state.reset_height(2);
+            assert_eq!(state.selected_commit_branch_name(), Some("master"));
+            state.select_next();
+            assert_eq!(
+                state.selected_commit_branch_name(),
+                Some("feat/remote-only")
+            );
+        });
+
+        git.checkout("feat/a");
+        with_repository_state(dir.path(), |state| {
+            state.reset_height(2);
+            assert_eq!(state.selected_commit_branch_name(), Some("feat/a"));
+        });
     }
 }
